@@ -1,0 +1,148 @@
+-- Create database
+CREATE DATABASE movie_rentals;
+USE movie_rentals;
+
+-- Create tables
+CREATE TABLE genres (
+    genre_id INT PRIMARY KEY,
+    genre_name VARCHAR(50)
+);
+
+CREATE TABLE movies (
+    movie_id INT PRIMARY KEY,
+    title VARCHAR(100),
+    genre_id INT,
+    rental_rate DECIMAL(4,2),
+    FOREIGN KEY (genre_id) REFERENCES genres(genre_id)
+);
+
+CREATE TABLE customers (
+    customer_id INT PRIMARY KEY,
+    customer_name VARCHAR(100)
+);
+
+CREATE TABLE rentals (
+    rental_id INT PRIMARY KEY,
+    movie_id INT,
+    customer_id INT,
+    rental_date DATE,
+    rental_fee DECIMAL(4,2),
+    FOREIGN KEY (movie_id) REFERENCES movies(movie_id),
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+);
+
+-- Insert data into genres
+INSERT INTO genres VALUES
+(1, 'Action'),
+(2, 'Drama'),
+(3, 'Comedy'),
+(4, 'Sci-Fi');
+
+-- Insert data into movies
+INSERT INTO movies VALUES
+(1, 'The Ultimate Chase', 1, 5.99),
+(2, 'Life Stories', 2, 4.99),
+(3, 'Laugh Out Loud', 3, 4.99),
+(4, 'Space Adventure', 4, 5.99),
+(5, 'Hero Rising', 1, 5.99),
+(6, 'Deep Emotions', 2, 4.99),
+(7, 'Comic Relief', 3, 4.99),
+(8, 'Star Warriors', 4, 5.99);
+
+-- Insert data into customers
+INSERT INTO customers VALUES
+(1, 'John Smith'),
+(2, 'Mary Johnson'),
+(3, 'Robert Brown'),
+(4, 'Sarah Wilson'),
+(5, 'Michael Davis'),
+(6, 'Lisa Anderson');
+
+-- Insert data into rentals
+INSERT INTO rentals VALUES
+(1, 1, 1, '2025-01-15', 5.99),
+(2, 2, 2, '2025-01-20', 4.99),
+(3, 3, 3, '2025-02-01', 4.99),
+(4, 4, 4, '2025-02-15', 5.99),
+(5, 5, 1, '2025-02-28', 5.99),
+(6, 6, 2, '2025-03-05', 4.99),
+(7, 7, 5, '2025-03-10', 4.99),
+(8, 8, 6, '2025-03-15', 5.99),
+(9, 1, 3, '2025-03-20', 5.99),
+(10, 2, 4, '2025-04-01', 4.99),
+(11, 3, 5, '2025-04-15', 4.99),
+(12, 4, 6, '2025-04-20', 5.99),
+(13, 5, 1, '2025-05-01', 5.99),
+(14, 6, 2, '2025-05-10', 4.99),
+(15, 7, 3, '2025-05-15', 4.99);
+
+
+
+-- a) Drill Down (Genre to Movie level)
+SELECT 
+    g.genre_name,
+    m.title,
+    COUNT(r.rental_id) as rental_count,
+    SUM(r.rental_fee) as total_fees
+FROM genres g
+JOIN movies m ON g.genre_id = m.genre_id
+JOIN rentals r ON m.movie_id = r.movie_id
+GROUP BY g.genre_name, m.title
+ORDER BY g.genre_name, m.title;
+
+-- b) Rollup (Summary by genre and overall)
+SELECT 
+    IFNULL(g.genre_name, 'All Genres') as genre_name,
+    SUM(r.rental_fee) as total_rental_fees
+FROM rentals r
+JOIN movies m ON r.movie_id = m.movie_id
+JOIN genres g ON m.genre_id = g.genre_id
+GROUP BY g.genre_name WITH ROLLUP;
+
+-- c) Cube (Analysis across multiple dimensions) - Run in online Postgre Compillar 
+SELECT 
+    COALESCE(g.genre_name, 'All Genres') as genre_name,
+    COALESCE(TO_CHAR(r.rental_date, 'YYYY-MM'), 'All Months') as rental_month,
+    COALESCE(c.customer_name, 'All Customers') as customer_name,
+    SUM(r.rental_fee) as total_rental_fees,
+    COUNT(*) as number_of_rentals
+FROM rentals r
+JOIN movies m ON r.movie_id = m.movie_id
+JOIN genres g ON m.genre_id = g.genre_id
+JOIN customers c ON r.customer_id = c.customer_id
+GROUP BY CUBE(g.genre_name, TO_CHAR(r.rental_date, 'YYYY-MM'), c.customer_name)
+ORDER BY 
+    genre_name NULLS LAST,
+    rental_month NULLS LAST,
+    customer_name NULLS LAST
+	
+
+-- Extract rentals only from the ‘Action’ genre.
+SELECT 
+    r.rental_id,
+    r.rental_date,
+    m.title as movie_title,
+    c.customer_name,
+    r.rental_fee
+FROM rentals r
+JOIN movies m ON r.movie_id = m.movie_id
+JOIN genres g ON m.genre_id = g.genre_id
+JOIN customers c ON r.customer_id = c.customer_id
+WHERE g.genre_name = 'Action'
+ORDER BY r.rental_date;
+
+
+-- Extract rentals where GENRE = 'Action' or 'Drama' and RENTAL_DATE is in the last 3 months.
+SELECT 
+    r.rental_date,
+    g.genre_name,
+    m.title,
+    c.customer_name,
+    r.rental_fee
+FROM rentals r
+JOIN movies m ON r.movie_id = m.movie_id
+JOIN genres g ON m.genre_id = g.genre_id
+JOIN customers c ON r.customer_id = c.customer_id
+WHERE g.genre_name IN ('Action', 'Drama')
+AND r.rental_date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+ORDER BY r.rental_date, g.genre_name;
